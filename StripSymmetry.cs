@@ -11,7 +11,7 @@ namespace StripSymmetry
     public class StripSymmetry : MonoBehaviour
     {
         private OSD osd = new OSD();
-        private HotKey hotkey = new HotKey();
+        private HotKey hotkey = new HotKey("triggerWith", "LeftAlt+LeftShift+Mouse0");
 
         public void Awake()
         {
@@ -44,7 +44,7 @@ namespace StripSymmetry
                 print(String.Format("({0}).symmetryCounterparts.Count = {1}", p.partInfo.title, p.symmetryCounterparts.Count));
                 if (p.symmetryCounterparts.Count == 0)
                 {
-                    osd.Error("Has no symmetry: " + p.partInfo.title);
+                    osd.Error("Part has no symmetry: " + p.partInfo.title);
                     return;
                 }
                 osd.Info("Removing symmetry...");
@@ -52,7 +52,7 @@ namespace StripSymmetry
             }
         }
 
-        private Part GetPartUnderCursor(ShipConstruct ship)
+        private static Part GetPartUnderCursor(ShipConstruct ship)
         {
             var ray = Camera.main.ScreenPointToRay(Input.mousePosition);
             RaycastHit hit;
@@ -63,19 +63,16 @@ namespace StripSymmetry
             return null;
         }
 
-        private void RemoveSymmetry(Part symmPart)
+        private static void RemoveSymmetry(Part symmPart)
         {
-            // create list of all parts in this branch
-            List<Part> branchParts = new List<Part>();
-            branchParts = GetAllDescendants(symmPart);
             // remove the symmetry of parts that have counterparts outside this branch but leave symmetry for groups wholly within this branch.
-            foreach (Part child in branchParts)
+            foreach (Part child in symmPart.children)
             {
                 foreach (Part otherSymm in child.symmetryCounterparts)
                 {
-                    if (!branchParts.Contains(otherSymm))
+                    if (!symmPart.children.Contains(otherSymm))
                     {
-                        RemovePartSymmetry(child);
+                        RemoveSymmetry(child);
                         break;
                     }
                 }
@@ -83,10 +80,8 @@ namespace StripSymmetry
             RemovePartSymmetry(symmPart);
         }
 
-        private void RemovePartSymmetry(Part p)
+        private static void RemovePartSymmetry(Part p)
         {
-            //not sure about this part, is setting symmetryMode = 0 in the part and -= 1 in its counterparts enough or even possible?
-            //Or do/can you remove all counterparts from the part (or set it to null) and the part from the counterparts' list of its counterparts?
             foreach (Part c in p.symmetryCounterparts)
             {
                 c.symmetryCounterparts.Clear();
@@ -95,39 +90,37 @@ namespace StripSymmetry
             p.symmetryCounterparts.Clear();
             p.symmetryMode = 0;
         }
-
-        private List<Part> GetAllDescendants(Part parent)
-        {
-            List<Part> subs = new List<Part>();
-            foreach (Part child in parent.children)
-            {
-                subs.AddRange(GetAllDescendants(child));
-            }
-            return subs;
-        }
     }
 
     public class HotKey
     {
         private List<KeyCode> modifiers;
         private KeyCode trigger;
+        private string name;
+        private string defaultKey;
+
+        public HotKey(string name, string defaultKey)
+        {
+            this.name = name;
+            this.defaultKey = defaultKey;
+        }
 
         public void load()
         {
             var config = KSP.IO.PluginConfiguration.CreateForType<StripSymmetry>();
             config.load();
-            var names = config.GetValue("triggerWith", "LeftAlt+LeftShift+Mouse0").Split('+');
-            modifiers = new List<KeyCode>();
-            for (var i = 0; i < names.Length - 1; ++i)
-            {
-                modifiers.Add((KeyCode)Enum.Parse(typeof(KeyCode), names[i]));
-            }
-            trigger = (KeyCode)Enum.Parse(typeof(KeyCode), names[names.Length - 1]);
+            var names = config.GetValue(name, defaultKey).Split('+');
+            config.SetValue(name, names);
+            config.save(); // Recreate config in case it's deleted.
+
+            var keys = names.Select(Enums.Parse<KeyCode>).ToList();
+            trigger = keys.Last();
+            modifiers = keys.SkipLast().ToList();
         }
 
         public bool isTriggered()
         {
-            return modifiers.All(m => Input.GetKey(m)) && Input.GetKeyDown(trigger);
+            return modifiers.All(Input.GetKey) && Input.GetKeyDown(trigger);
         }
     }
 
@@ -143,7 +136,7 @@ namespace StripSymmetry
 
         private List<OSD.Message> msgs = new List<OSD.Message>();
 
-        private GUIStyle CreateStyle(Color color)
+        private static GUIStyle CreateStyle(Color color)
         {
             var style = new GUIStyle();
             style.stretchWidth = true;
