@@ -109,13 +109,19 @@ namespace StripSymmetry
         {
             var config = KSP.IO.PluginConfiguration.CreateForType<StripSymmetry>();
             config.load();
-            var names = config.GetValue(name, defaultKey).Split('+');
-            config.SetValue(name, names);
+            var rawNames = config.GetValue(name, defaultKey);
+            var names = rawNames.Split('+');
+            config.SetValue(name, rawNames);
             config.save(); // Recreate config in case it's deleted.
 
             var keys = names.Select(Enums.Parse<KeyCode>).ToList();
             trigger = keys.Last();
             modifiers = keys.SkipLast().ToList();
+
+            foreach (var k in keys)
+            {
+                Debug.Log("Key: " + k.ToString());
+            }
         }
 
         public bool isTriggered()
